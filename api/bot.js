@@ -203,6 +203,9 @@ bot.command('tmdb', async (ctx) => {
       subtitles: data.subtitles
     });
 
+    // Wait 1.5 seconds before showing results (like autofilter)
+    await new Promise(resolve => setTimeout(resolve, 1500));
+
     await sendMovieResults(ctx, data, searchTime, tmdbId);
     
   } catch (error) {
@@ -232,6 +235,9 @@ async function handleSearch(ctx, query) {
       movie: data.movie,
       subtitles: data.subtitles
     });
+
+    // Wait 1.5 seconds before showing results (like autofilter)
+    await new Promise(resolve => setTimeout(resolve, 1500));
 
     await sendMovieResults(ctx, data, searchTime, query);
     
@@ -330,8 +336,8 @@ bot.on('callback_query', async (ctx) => {
       // Quick response
       await ctx.answerCbQuery('⚡ ᴅᴏᴡɴʟᴏᴀᴅɪɴɢ...');
       
-      // Show downloading status
-      const statusMsg = await ctx.reply('⚡ *ᴅᴏᴡɴʟᴏᴀᴅɪɴɢ...*\n\n📁 ' + subtitle.name.substring(0, 50), { parse_mode: 'Markdown' });
+      // Show uploading status in chat (like autofilter bots)
+      const statusMsg = await ctx.reply('📤 *ᴜᴘʟᴏᴀᴅɪɴɢ ᴛᴏ ᴛᴇʟᴇɢʀᴀᴍ...*\n\n📁 ' + subtitle.name.substring(0, 50), { parse_mode: 'Markdown' });
       
       // Download the file
       const fileData = await downloadSubtitle(subtitle.proxy_download_url);
@@ -342,7 +348,7 @@ bot.on('callback_query', async (ctx) => {
         return ctx.reply('❌ *ᴅᴏᴡɴʟᴏᴀᴅ ғᴀɪʟᴇᴅ*\n\nᴛʀʏ ᴀɴᴏᴛʜᴇʀ sᴜʙᴛɪᴛʟᴇ ᴏʀ sᴇᴀʀᴄʜ ᴀɢᴀɪɴ!', { parse_mode: 'Markdown' });
       }
       
-      // Delete downloading message
+      // Delete uploading message
       await ctx.telegram.deleteMessage(ctx.chat.id, statusMsg.message_id).catch(() => {});
       
       // Send subtitle file directly
