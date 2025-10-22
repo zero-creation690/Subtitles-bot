@@ -10,6 +10,18 @@ const bot = new Telegraf(BOT_TOKEN);
 // Store user sessions
 const userSessions = new Map();
 
+// Store user first visit and last image index
+const userVisits = new Map();
+
+// Helper function to get greeting based on time
+function getGreeting() {
+  const hour = new Date().getHours();
+  if (hour >= 5 && hour < 12) return 'ɢᴏᴏᴅ ᴍᴏʀɴɪɴɢ 🌞';
+  if (hour >= 12 && hour < 17) return 'ɢᴏᴏᴅ ᴀғᴛᴇʀɴᴏᴏɴ ☀️';
+  if (hour >= 17 && hour < 21) return 'ɢᴏᴏᴅ ᴇᴠᴇɴɪɴɢ 🌆';
+  return 'ɢᴏᴏᴅ ɴɪɢʜᴛ 🌙';
+}
+
 // Helper function to make API requests
 async function searchSubtitles(query) {
   try {
@@ -31,43 +43,105 @@ async function getSubtitlesByTMDB(tmdbId) {
   }
 }
 
-// Start command
-bot.start((ctx) => {
-  const welcomeMessage = `🎬 *Welcome to Subtitle Downloader Bot!* 🎬
+async function downloadSubtitle(downloadUrl) {
+  try {
+    const response = await axios.get(`${API_BASE_URL}${downloadUrl}`, {
+      responseType: 'arraybuffer'
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Download error:', error);
+    return null;
+  }
+}
 
-I can help you find and download subtitles for your favorite movies.
+// Start command with images
+bot.start(async (ctx) => {
+  const userName = ctx.from.first_name || 'there';
+  const greeting = getGreeting();
+  const userId = ctx.from.id;
+  
+  const welcomeMessage = `ʜᴇʏ, ${userName}**! ${greeting}**
+ɪ'ᴍ ʏᴏᴜʀ ᴘᴏᴡᴇʀғᴜʟ sᴜʙᴛɪᴛʟᴇ ᴅᴏᴡɴʟᴏᴀᴅᴇʀ ʙᴏᴛ 🎞️
+ᴊᴜsᴛ sᴇɴᴅ ᴍᴇ ᴀ ᴍᴏᴠɪᴇ ᴏʀ sᴇʀɪᴇs ɴᴀᴍᴇ, ᴀɴᴅ ɪ'ʟʟ ғɪɴᴅ ʏᴏᴜʀ sᴜʙᴛɪᴛʟᴇs ɪɴsᴛᴀɴᴛʟʏ ⏬
+sᴜᴘᴘᴏʀᴛs ᴍᴜʟᴛɪ-ʟᴀɴɢᴜᴀɢᴇ ᴀɴᴅ ᴘᴇʀᴍᴀɴᴇɴᴛ sᴜʙᴛɪᴛʟᴇ ᴍᴇʀɢɪɴɢ 🎬
+ʟᴇᴛ's ᴍᴀᴋᴇ ʏᴏᴜʀ ᴍᴏᴠɪᴇ ɴɪɢʜᴛs ᴇᴠᴇɴ ʙᴇᴛᴛᴇʀ! 🍿
 
-*Available Commands:*
-/search - Search subtitles by movie name
-/tmdb - Search by TMDB ID
-/help - Show this help message
+ʙᴏᴛ ᴅᴇᴠᴇʟᴏᴘᴇᴅ ʙʏ @Zeroboy216`;
 
-*How to use:*
-1. Use /search followed by movie name
-2. Or use /tmdb followed by TMDB ID
-3. Browse available subtitles
-4. Download your preferred subtitle
+  const keyboard = Markup.inlineKeyboard([
+    [
+      Markup.button.url('📢 ᴊᴏɪɴ ɢʀᴏᴜᴘ', 'https://t.me/zerodevbro')
+    ],
+    [
+      Markup.button.url('🎬 ᴍᴏᴠɪᴇ ᴅᴏᴡɴʟᴏᴀᴅᴇʀ', 'https://t.me/Filmzimovietvserise21bot')
+    ]
+  ]);
 
-*Example:*
-/search Fight Club
-/tmdb 550`;
+  // Available images
+  const images = [
+    'https://ar-hosting.pages.dev/1761107260503.jpg',
+    'https://ar-hosting.pages.dev/1761107265807.jpg',
+    'https://ar-hosting.pages.dev/1761107283565.jpg'
+  ];
 
-  ctx.reply(welcomeMessage, { parse_mode: 'Markdown' });
+  try {
+    // Check if user has visited before
+    const userVisit = userVisits.get(userId);
+    
+    if (!userVisit) {
+      // First time user - send first image
+      userVisits.set(userId, { 
+        visited: true, 
+        lastImageIndex: 0,
+        visitCount: 1
+      });
+      
+      await ctx.replyWithPhoto(images[0], {
+        caption: welcomeMessage,
+        ...keyboard
+      });
+    } else {
+      // Returning user - send random image (excluding last shown)
+      let randomIndex;
+      do {
+        randomIndex = Math.floor(Math.random() * images.length);
+      } while (randomIndex === userVisit.lastImageIndex && images.length > 1);
+      
+      // Update user visit info
+      userVisits.set(userId, {
+        visited: true,
+        lastImageIndex: randomIndex,
+        visitCount: userVisit.visitCount + 1
+      });
+      
+      await ctx.replyWithPhoto(images[randomIndex], {
+        caption: welcomeMessage,
+        ...keyboard
+      });
+    }
+  } catch (error) {
+    // Fallback if images fail
+    console.error('Image send error:', error);
+    ctx.reply(welcomeMessage, keyboard);
+  }
 });
 
 // Help command
 bot.help((ctx) => {
-  ctx.reply(`🤖 *Bot Commands:*
+  ctx.reply(`🤖 *ʙᴏᴛ ᴄᴏᴍᴍᴀɴᴅs:*
 
-/search <movie name> - Search subtitles
-/tmdb <tmdb id> - Search by TMDB ID
-/help - Show help
+/search <movie name> - sᴇᴀʀᴄʜ sᴜʙᴛɪᴛʟᴇs
+/tmdb <tmdb id> - sᴇᴀʀᴄʜ ʙʏ ᴛᴍᴅʙ ɪᴅ
+/help - sʜᴏᴡ ʜᴇʟᴘ
 
-*Examples:*
+*ᴇxᴀᴍᴘʟᴇs:*
 • /search Inception
 • /search The Dark Knight
 • /tmdb 550
-• /tmdb 680`, { parse_mode: 'Markdown' });
+• /tmdb 680
+
+ʙᴏᴛ ᴅᴇᴠᴇʟᴏᴘᴇᴅ ʙʏ @Zeroboy216`, { parse_mode: 'Markdown' });
 });
 
 // Search command
@@ -75,16 +149,16 @@ bot.command('search', async (ctx) => {
   const query = ctx.message.text.split(' ').slice(1).join(' ');
   
   if (!query) {
-    return ctx.reply('❌ Please provide a movie name. Example: /search Fight Club');
+    return ctx.reply('❌ ᴘʟᴇᴀsᴇ ᴘʀᴏᴠɪᴅᴇ ᴀ ᴍᴏᴠɪᴇ ɴᴀᴍᴇ. ᴇxᴀᴍᴘʟᴇ: /search Fight Club');
   }
 
   try {
-    ctx.reply('🔍 Searching for subtitles...');
+    ctx.reply('🔍 sᴇᴀʀᴄʜɪɴɢ ғᴏʀ sᴜʙᴛɪᴛʟᴇs...');
     
     const data = await searchSubtitles(query);
     
     if (!data || !data.success) {
-      return ctx.reply('❌ No subtitles found or API error. Please try another movie.');
+      return ctx.reply('❌ ɴᴏ sᴜʙᴛɪᴛʟᴇs ғᴏᴜɴᴅ ᴏʀ ᴀᴘɪ ᴇʀʀᴏʀ. ᴘʟᴇᴀsᴇ ᴛʀʏ ᴀɴᴏᴛʜᴇʀ ᴍᴏᴠɪᴇ.');
     }
 
     // Store movie data in session
@@ -97,7 +171,7 @@ bot.command('search', async (ctx) => {
     
   } catch (error) {
     console.error('Search error:', error);
-    ctx.reply('❌ Error searching for subtitles. Please try again.');
+    ctx.reply('❌ ᴇʀʀᴏʀ sᴇᴀʀᴄʜɪɴɢ ғᴏʀ sᴜʙᴛɪᴛʟᴇs. ᴘʟᴇᴀsᴇ ᴛʀʏ ᴀɢᴀɪɴ.');
   }
 });
 
@@ -106,20 +180,20 @@ bot.command('tmdb', async (ctx) => {
   const tmdbId = ctx.message.text.split(' ')[1];
   
   if (!tmdbId) {
-    return ctx.reply('❌ Please provide a TMDB ID. Example: /tmdb 550');
+    return ctx.reply('❌ ᴘʟᴇᴀsᴇ ᴘʀᴏᴠɪᴅᴇ ᴀ ᴛᴍᴅʙ ɪᴅ. ᴇxᴀᴍᴘʟᴇ: /tmdb 550');
   }
 
   if (!/^\d+$/.test(tmdbId)) {
-    return ctx.reply('❌ Invalid TMDB ID. Please provide a numeric ID.');
+    return ctx.reply('❌ ɪɴᴠᴀʟɪᴅ ᴛᴍᴅʙ ɪᴅ. ᴘʟᴇᴀsᴇ ᴘʀᴏᴠɪᴅᴇ ᴀ ɴᴜᴍᴇʀɪᴄ ɪᴅ.');
   }
 
   try {
-    ctx.reply('🔍 Searching for subtitles by TMDB ID...');
+    ctx.reply('🔍 sᴇᴀʀᴄʜɪɴɢ ғᴏʀ sᴜʙᴛɪᴛʟᴇs ʙʏ ᴛᴍᴅʙ ɪᴅ...');
     
     const data = await getSubtitlesByTMDB(tmdbId);
     
     if (!data || !data.success) {
-      return ctx.reply('❌ No subtitles found for this TMDB ID.');
+      return ctx.reply('❌ ɴᴏ sᴜʙᴛɪᴛʟᴇs ғᴏᴜɴᴅ ғᴏʀ ᴛʜɪs ᴛᴍᴅʙ ɪᴅ.');
     }
 
     // Store movie data in session
@@ -132,28 +206,28 @@ bot.command('tmdb', async (ctx) => {
     
   } catch (error) {
     console.error('TMDB search error:', error);
-    ctx.reply('❌ Error searching for subtitles. Please try again.');
+    ctx.reply('❌ ᴇʀʀᴏʀ sᴇᴀʀᴄʜɪɴɢ ғᴏʀ sᴜʙᴛɪᴛʟᴇs. ᴘʟᴇᴀsᴇ ᴛʀʏ ᴀɢᴀɪɴ.');
   }
 });
 
-// Function to send movie results
+// Function to send movie results with direct download buttons
 async function sendMovieResults(ctx, data) {
   const { movie, subtitles } = data;
   
   // Movie info
   const movieInfo = `🎭 *${movie.title}* (${new Date(movie.release_date).getFullYear()})
   
-📝 *Overview:* ${movie.overview}
-⭐ *Rating:* ${movie.vote_average}/10
-⏱️ *Runtime:* ${movie.runtime} minutes
-🗣️ *Language:* ${movie.original_language}
-📅 *Released:* ${movie.release_date}
+📝 *ᴏᴠᴇʀᴠɪᴇᴡ:* ${movie.overview.substring(0, 200)}...
+⭐ *ʀᴀᴛɪɴɢ:* ${movie.vote_average}/10
+⏱️ *ʀᴜɴᴛɪᴍᴇ:* ${movie.runtime} ᴍɪɴᴜᴛᴇs
+🗣️ *ʟᴀɴɢᴜᴀɢᴇ:* ${movie.original_language}
+📅 *ʀᴇʟᴇᴀsᴇᴅ:* ${movie.release_date}
 
-📥 Found *${subtitles.length}* subtitle files available`;
+📥 ғᴏᴜɴᴅ *${subtitles.length}* sᴜʙᴛɪᴛʟᴇ ғɪʟᴇs ᴀᴠᴀɪʟᴀʙʟᴇ`;
 
   await ctx.reply(movieInfo, { parse_mode: 'Markdown' });
 
-  // Group subtitles by language for better organization
+  // Group subtitles by language
   const subtitlesByLang = {};
   subtitles.forEach(sub => {
     if (!subtitlesByLang[sub.language]) {
@@ -162,48 +236,91 @@ async function sendMovieResults(ctx, data) {
     subtitlesByLang[sub.language].push(sub);
   });
 
-  // Send subtitles organized by language
+  // Send subtitles with direct download buttons
   for (const [language, langSubtitles] of Object.entries(subtitlesByLang)) {
-    let langMessage = `\n🗣️ *${language} Subtitles:*\n\n`;
+    let langMessage = `\n🗣️ *${language} sᴜʙᴛɪᴛʟᴇs:*\n\n`;
+    
+    const buttons = [];
     
     langSubtitles.slice(0, 10).forEach((sub, index) => {
       langMessage += `${index + 1}. ${sub.name}\n`;
-      langMessage += `   ⭐ ${sub.rating} | 📥 ${sub.downloads} downloads\n`;
-      langMessage += `   [Download](${API_BASE_URL}${sub.proxy_download_url})\n\n`;
+      langMessage += `   ⭐ ${sub.rating} | 📥 ${sub.downloads} ᴅᴏᴡɴʟᴏᴀᴅs\n\n`;
+      
+      // Create callback data for each subtitle
+      const callbackData = `dl_${index}_${language}`;
+      buttons.push([Markup.button.callback(`📥 ${index + 1}. ${sub.name.substring(0, 30)}...`, callbackData)]);
+      
+      // Store subtitle info in session for callback
+      const session = userSessions.get(ctx.from.id) || {};
+      if (!session.downloadMap) session.downloadMap = {};
+      session.downloadMap[callbackData] = sub;
+      userSessions.set(ctx.from.id, session);
     });
 
     if (langSubtitles.length > 10) {
-      langMessage += `... and ${langSubtitles.length - 10} more ${language} subtitles`;
+      langMessage += `... ᴀɴᴅ ${langSubtitles.length - 10} ᴍᴏʀᴇ ${language} sᴜʙᴛɪᴛʟᴇs`;
     }
 
     try {
       await ctx.reply(langMessage, {
         parse_mode: 'Markdown',
-        disable_web_page_preview: true
+        ...Markup.inlineKeyboard(buttons)
       });
     } catch (error) {
-      // If message is too long, split it
-      const chunks = langMessage.match(/[\s\S]{1,4000}/g) || [];
-      for (const chunk of chunks) {
-        await ctx.reply(chunk, {
-          parse_mode: 'Markdown',
-          disable_web_page_preview: true
-        });
-      }
+      console.error('Error sending subtitles:', error);
     }
   }
 
   // Send quick actions
-  const quickActions = `💡 *Quick Actions:*
+  const quickActions = `💡 *ǫᴜɪᴄᴋ ᴀᴄᴛɪᴏɴs:*
   
-You can download any subtitle by clicking the download links above, or use these commands:
+ᴄʟɪᴄᴋ ᴀɴʏ ʙᴜᴛᴛᴏɴ ᴀʙᴏᴠᴇ ᴛᴏ ᴅᴏᴡɴʟᴏᴀᴅ sᴜʙᴛɪᴛʟᴇs ᴅɪʀᴇᴄᴛʟʏ!
 
-/search <movie> - Search another movie
-/tmdb <id> - Search by TMDB ID
-/help - Show help`;
+/search <movie> - sᴇᴀʀᴄʜ ᴀɴᴏᴛʜᴇʀ ᴍᴏᴠɪᴇ
+/tmdb <id> - sᴇᴀʀᴄʜ ʙʏ ᴛᴍᴅʙ ɪᴅ
+/help - sʜᴏᴡ ʜᴇʟᴘ`;
 
   await ctx.reply(quickActions, { parse_mode: 'Markdown' });
 }
+
+// Handle callback queries for subtitle downloads
+bot.on('callback_query', async (ctx) => {
+  const callbackData = ctx.callbackQuery.data;
+  
+  if (callbackData.startsWith('dl_')) {
+    const session = userSessions.get(ctx.from.id);
+    
+    if (!session || !session.downloadMap || !session.downloadMap[callbackData]) {
+      return ctx.answerCbQuery('❌ sᴜʙᴛɪᴛʟᴇ ɴᴏᴛ ғᴏᴜɴᴅ. ᴘʟᴇᴀsᴇ sᴇᴀʀᴄʜ ᴀɢᴀɪɴ.');
+    }
+    
+    const subtitle = session.downloadMap[callbackData];
+    
+    try {
+      await ctx.answerCbQuery('⏳ ᴅᴏᴡɴʟᴏᴀᴅɪɴɢ sᴜʙᴛɪᴛʟᴇ...');
+      await ctx.reply('📥 ᴅᴏᴡɴʟᴏᴀᴅɪɴɢ ʏᴏᴜʀ sᴜʙᴛɪᴛʟᴇ, ᴘʟᴇᴀsᴇ ᴡᴀɪᴛ...');
+      
+      const fileData = await downloadSubtitle(subtitle.proxy_download_url);
+      
+      if (!fileData) {
+        return ctx.reply('❌ ғᴀɪʟᴇᴅ ᴛᴏ ᴅᴏᴡɴʟᴏᴀᴅ sᴜʙᴛɪᴛʟᴇ. ᴘʟᴇᴀsᴇ ᴛʀʏ ᴀɢᴀɪɴ.');
+      }
+      
+      // Send subtitle file directly to user
+      await ctx.replyWithDocument(
+        { source: Buffer.from(fileData), filename: subtitle.name },
+        {
+          caption: `✅ *sᴜʙᴛɪᴛʟᴇ ᴅᴏᴡɴʟᴏᴀᴅᴇᴅ sᴜᴄᴄᴇssғᴜʟʟʏ!*\n\n📁 ${subtitle.name}\n⭐ ${subtitle.rating} | 📥 ${subtitle.downloads} ᴅᴏᴡɴʟᴏᴀᴅs`,
+          parse_mode: 'Markdown'
+        }
+      );
+      
+    } catch (error) {
+      console.error('Download error:', error);
+      ctx.reply('❌ ᴇʀʀᴏʀ ᴅᴏᴡɴʟᴏᴀᴅɪɴɢ sᴜʙᴛɪᴛʟᴇ. ᴘʟᴇᴀsᴇ ᴛʀʏ ᴀɢᴀɪɴ.');
+    }
+  }
+});
 
 // Handle text messages for quick search
 bot.on('text', async (ctx) => {
@@ -215,12 +332,12 @@ bot.on('text', async (ctx) => {
   // If message is longer than 2 characters, treat as search
   if (text.length > 2) {
     try {
-      ctx.reply('🔍 Searching for subtitles...');
+      ctx.reply('🔍 sᴇᴀʀᴄʜɪɴɢ ғᴏʀ sᴜʙᴛɪᴛʟᴇs...');
       
       const data = await searchSubtitles(text);
       
       if (!data || !data.success) {
-        return ctx.reply('❌ No subtitles found. Please try another movie name.');
+        return ctx.reply('❌ ɴᴏ sᴜʙᴛɪᴛʟᴇs ғᴏᴜɴᴅ. ᴘʟᴇᴀsᴇ ᴛʀʏ ᴀɴᴏᴛʜᴇʀ ᴍᴏᴠɪᴇ ɴᴀᴍᴇ.');
       }
 
       // Store movie data in session
@@ -233,7 +350,7 @@ bot.on('text', async (ctx) => {
       
     } catch (error) {
       console.error('Quick search error:', error);
-      ctx.reply('❌ Error searching for subtitles. Please try again.');
+      ctx.reply('❌ ᴇʀʀᴏʀ sᴇᴀʀᴄʜɪɴɢ ғᴏʀ sᴜʙᴛɪᴛʟᴇs. ᴘʟᴇᴀsᴇ ᴛʀʏ ᴀɢᴀɪɴ.');
     }
   }
 });
@@ -241,7 +358,7 @@ bot.on('text', async (ctx) => {
 // Error handling
 bot.catch((err, ctx) => {
   console.error(`Error for ${ctx.updateType}:`, err);
-  ctx.reply('❌ An error occurred. Please try again.');
+  ctx.reply('❌ ᴀɴ ᴇʀʀᴏʀ ᴏᴄᴄᴜʀʀᴇᴅ. ᴘʟᴇᴀsᴇ ᴛʀʏ ᴀɢᴀɪɴ.');
 });
 
 // Webhook for Vercel
