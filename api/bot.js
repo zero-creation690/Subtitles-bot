@@ -15,12 +15,8 @@ const userVisits = new Map();
 
 // Helper function to get greeting based on server time + timezone offset
 function getGreeting() {
-  // Get current UTC time
   const now = new Date();
-  
-  // Add your timezone offset (for Sri Lanka/India: UTC+5:30)
-  // Adjust this offset based on your timezone
-  const timezoneOffset = 5.5; // 5 hours 30 minutes
+  const timezoneOffset = 5.5;
   const localTime = new Date(now.getTime() + (timezoneOffset * 60 * 60 * 1000));
   const hour = localTime.getUTCHours();
   
@@ -33,7 +29,9 @@ function getGreeting() {
 // Helper function to make API requests
 async function searchSubtitles(query) {
   try {
-    const response = await axios.get(`${API_BASE_URL}/api/search/${encodeURIComponent(query)}`);
+    const response = await axios.get(`${API_BASE_URL}/api/search/${encodeURIComponent(query)}`, {
+      timeout: 10000
+    });
     return response.data;
   } catch (error) {
     console.error('Search API error:', error);
@@ -43,23 +41,12 @@ async function searchSubtitles(query) {
 
 async function getSubtitlesByTMDB(tmdbId) {
   try {
-    const response = await axios.get(`${API_BASE_URL}/api/subtitles/tmdb/${tmdbId}`);
-    return response.data;
-  } catch (error) {
-    console.error('TMDB API error:', error);
-    return null;
-  }
-}
-
-async function downloadSubtitle(downloadUrl) {
-  try {
-    const response = await axios.get(`${API_BASE_URL}${downloadUrl}`, {
-      responseType: 'arraybuffer',
-      timeout: 10000 // 10 seconds timeout for faster download
+    const response = await axios.get(`${API_BASE_URL}/api/subtitles/tmdb/${tmdbId}`, {
+      timeout: 10000
     });
     return response.data;
   } catch (error) {
-    console.error('Download error:', error);
+    console.error('TMDB API error:', error);
     return null;
   }
 }
@@ -95,11 +82,9 @@ sᴜᴘᴘᴏʀᴛs ᴍᴜʟᴛɪ-ʟᴀɴɢᴜᴀɢᴇ ᴀɴᴅ ᴘᴇʀᴍᴀɴ
   ];
 
   try {
-    // Check if user has visited before
     const userVisit = userVisits.get(userId);
     
     if (!userVisit) {
-      // First time user - send first image
       userVisits.set(userId, { 
         visited: true, 
         lastImageIndex: 0,
@@ -111,13 +96,11 @@ sᴜᴘᴘᴏʀᴛs ᴍᴜʟᴛɪ-ʟᴀɴɢᴜᴀɢᴇ ᴀɴᴅ ᴘᴇʀᴍᴀɴ
         ...keyboard
       });
     } else {
-      // Returning user - send random image (excluding last shown)
       let randomIndex;
       do {
         randomIndex = Math.floor(Math.random() * images.length);
       } while (randomIndex === userVisit.lastImageIndex && images.length > 1);
       
-      // Update user visit info
       userVisits.set(userId, {
         visited: true,
         lastImageIndex: randomIndex,
@@ -130,7 +113,6 @@ sᴜᴘᴘᴏʀᴛs ᴍᴜʟᴛɪ-ʟᴀɴɢᴜᴀɢᴇ ᴀɴᴅ ᴘᴇʀᴍᴀɴ
       });
     }
   } catch (error) {
-    // Fallback if images fail
     console.error('Image send error:', error);
     ctx.reply(welcomeMessage, keyboard);
   }
@@ -187,7 +169,6 @@ bot.command('tmdb', async (ctx) => {
       return ctx.reply('❌ ɴᴏ sᴜʙᴛɪᴛʟᴇs ғᴏᴜɴᴅ ғᴏʀ ᴛʜɪs ᴛᴍᴅʙ ɪᴅ.');
     }
 
-    // Store movie data in session
     userSessions.set(ctx.from.id, {
       movie: data.movie,
       subtitles: data.subtitles,
@@ -216,7 +197,6 @@ async function handleSearch(ctx, query) {
       return ctx.reply('❌ ɴᴏ sᴜʙᴛɪᴛʟᴇs ғᴏᴜɴᴅ. ᴘʟᴇᴀsᴇ ᴛʀʏ ᴀɴᴏᴛʜᴇʀ ᴍᴏᴠɪᴇ ɴᴀᴍᴇ.');
     }
 
-    // Store movie data in session
     userSessions.set(ctx.from.id, {
       movie: data.movie,
       subtitles: data.subtitles,
@@ -264,7 +244,7 @@ Rᴇǫᴜᴇꜱᴛᴇᴅ Bʏ ☞ ${userName}
 
   await ctx.reply(headerMessage);
 
-  // Create language selection buttons (max 6 per row)
+  // Create language selection buttons
   const languageButtons = [];
   const languages = Object.keys(subtitlesByLang);
   
@@ -287,7 +267,7 @@ Rᴇǫᴜᴇꜱᴛᴇᴅ Bʏ ☞ ${userName}
   });
 }
 
-// Function to send subtitles for selected language
+// Function to send subtitles for selected language with direct download links
 async function sendSubtitlesForLanguage(ctx, language) {
   const session = userSessions.get(ctx.from.id);
   if (!session || !session.languageMap || !session.languageMap[language]) {
@@ -305,37 +285,35 @@ async function sendSubtitlesForLanguage(ctx, language) {
   }
 
   // Send language selected header
-  await ctx.reply(`**${language} sᴜʙᴛɪᴛʟᴇs sᴇʟᴇᴄᴛᴇᴅ ʙʏ ${userName}**\n\n**sᴇʟᴇᴄᴛ ғɪʟᴇs:**`, {
+  await ctx.reply(`**${language} sᴜʙᴛɪᴛʟᴇs sᴇʟᴇᴄᴛᴇᴅ ʙʏ ${userName}**\n\n**ᴄʟɪᴄᴋ ᴏɴ ᴛʜᴇ ʙᴜᴛᴛᴏɴs ʙᴇʟᴏᴡ ᴛᴏ ɢᴇᴛ ᴅɪʀᴇᴄᴛ ᴅᴏᴡɴʟᴏᴀᴅ ʟɪɴᴋs:**`, {
     parse_mode: 'Markdown'
   });
 
-  // Create subtitle buttons (max 6 files)
+  // Create subtitle buttons with direct download links (max 6 files)
   const subtitleButtons = [];
   const maxFiles = Math.min(subtitles.length, 6);
   
   for (let i = 0; i < maxFiles; i++) {
     const sub = subtitles[i];
-    const buttonText = `📥 ${sub.name.substring(0, 30)}${sub.name.length > 30 ? '...' : ''}`;
-    const callbackData = `dl_${i}_${language}_${Date.now()}`;
     
-    // Store subtitle info in session for callback
-    if (!session.downloadMap) session.downloadMap = {};
-    session.downloadMap[callbackData] = sub;
-    userSessions.set(ctx.from.id, session);
+    // Create direct download URL
+    const directDownloadUrl = `${API_BASE_URL}${sub.proxy_download_url}`;
+    const buttonText = `📥 ${sub.name.substring(0, 25)}${sub.name.length > 25 ? '...' : ''}`;
     
-    subtitleButtons.push([Markup.button.callback(buttonText, callbackData)]);
+    // Use URL button for direct download
+    subtitleButtons.push([Markup.button.url(buttonText, directDownloadUrl)]);
   }
 
   // Add back button
   subtitleButtons.push([Markup.button.callback('« ʙᴀᴄᴋ ᴛᴏ ʟᴀɴɢᴜᴀɢᴇs', `back_${Date.now()}`)]);
 
-  await ctx.reply(`**ғᴏᴜɴᴅ ${subtitles.length} ${language} sᴜʙᴛɪᴛʟᴇs:**`, {
+  await ctx.reply(`**ғᴏᴜɴᴅ ${subtitles.length} ${language} sᴜʙᴛɪᴛʟᴇs - ᴄʟɪᴄᴋ ʙᴜᴛᴛᴏɴs ғᴏʀ ᴅɪʀᴇᴄᴛ ᴅᴏᴡɴʟᴏᴀᴅ:**`, {
     parse_mode: 'Markdown',
     ...Markup.inlineKeyboard(subtitleButtons)
   });
 }
 
-// Handle callback queries for language selection and downloads
+// Handle callback queries for language selection
 bot.on('callback_query', async (ctx) => {
   const callbackData = ctx.callbackQuery.data;
   
@@ -344,54 +322,6 @@ bot.on('callback_query', async (ctx) => {
     const language = callbackData.split('_')[1];
     await ctx.answerCbQuery(`✅ sᴇʟᴇᴄᴛᴇᴅ ${language}`);
     await sendSubtitlesForLanguage(ctx, language);
-    
-  } else if (callbackData.startsWith('dl_')) {
-    // Subtitle download
-    const session = userSessions.get(ctx.from.id);
-    
-    if (!session || !session.downloadMap || !session.downloadMap[callbackData]) {
-      return ctx.answerCbQuery('❌ sᴜʙᴛɪᴛʟᴇ ɴᴏᴛ ғᴏᴜɴᴅ. ᴘʟᴇᴀsᴇ sᴇᴀʀᴄʜ ᴀɢᴀɪɴ.');
-    }
-    
-    const subtitle = session.downloadMap[callbackData];
-    
-    try {
-      await ctx.answerCbQuery('⏳ ᴅᴏᴡɴʟᴏᴀᴅɪɴɢ sᴜʙᴛɪᴛʟᴇ...');
-      
-      const downloadMsg = await ctx.reply('🚀 **ғᴀsᴛ ᴅᴏᴡɴʟᴏᴀᴅɪɴɢ...**\n\n⏱️ ᴛʜɪs ᴡɪʟʟ ᴛᴀᴋᴇ ᴏɴʟʏ 2 sᴇᴄᴏɴᴅs!', { 
-        parse_mode: 'Markdown' 
-      });
-      
-      const startTime = Date.now();
-      const fileData = await downloadSubtitle(subtitle.proxy_download_url);
-      const downloadTime = Date.now() - startTime;
-      
-      if (!fileData) {
-        await ctx.telegram.editMessageText(
-          ctx.chat.id,
-          downloadMsg.message_id,
-          null,
-          '❌ ғᴀɪʟᴇᴅ ᴛᴏ ᴅᴏᴡɴʟᴏᴀᴅ sᴜʙᴛɪᴛʟᴇ. ᴘʟᴇᴀsᴇ ᴛʀʏ ᴀɢᴀɪɴ.'
-        );
-        return;
-      }
-      
-      // Delete downloading message
-      await ctx.telegram.deleteMessage(ctx.chat.id, downloadMsg.message_id);
-      
-      // Send subtitle file directly to user
-      await ctx.replyWithDocument(
-        { source: Buffer.from(fileData), filename: subtitle.name },
-        {
-          caption: `✅ **sᴜʙᴛɪᴛʟᴇ ᴅᴏᴡɴʟᴏᴀᴅᴇᴅ sᴜᴄᴄᴇssғᴜʟʟʏ!**\n\n📁 **ғɪʟᴇ:** ${subtitle.name}\n⭐ **ʀᴀᴛɪɴɢ:** ${subtitle.rating}\n📥 **ᴅᴏᴡɴʟᴏᴀᴅs:** ${subtitle.downloads}\n⚡ **ᴅᴏᴡɴʟᴏᴀᴅ ᴛɪᴍᴇ:** ${downloadTime}ms\n\nᴘᴏᴡᴇʀᴇᴅ ʙʏ @Subtitles_Z_bot`,
-          parse_mode: 'Markdown'
-        }
-      );
-      
-    } catch (error) {
-      console.error('Download error:', error);
-      ctx.reply('❌ ᴇʀʀᴏʀ ᴅᴏᴡɴʟᴏᴀᴅɪɴɢ sᴜʙᴛɪᴛʟᴇ. ᴘʟᴇᴀsᴇ ᴛʀʏ ᴀɢᴀɪɴ ʟᴀᴛᴇʀ.');
-    }
     
   } else if (callbackData.startsWith('back_')) {
     // Back to language selection
@@ -427,10 +357,27 @@ bot.catch((err, ctx) => {
   ctx.reply('❌ ᴀɴ ᴇʀʀᴏʀ ᴏᴄᴄᴜʀʀᴇᴅ. ᴘʟᴇᴀsᴇ ᴛʀʏ ᴀɢᴀɪɴ.');
 });
 
-// Webhook for Vercel
+// Vercel serverless function handler
 module.exports = async (req, res) => {
+  // Set CORS headers
+  res.setHeader('Access-Control-Allow-Credentials', true);
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
+  res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version');
+
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    res.status(200).end();
+    return;
+  }
+
   try {
-    await bot.handleUpdate(req.body, res);
+    // Only handle POST requests (Telegram webhooks)
+    if (req.method === 'POST') {
+      await bot.handleUpdate(req.body, res);
+    } else {
+      res.status(200).json({ status: 'Bot is running on Vercel' });
+    }
   } catch (error) {
     console.error('Webhook error:', error);
     res.status(400).send('Error processing webhook');
