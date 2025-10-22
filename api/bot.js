@@ -19,7 +19,6 @@ function getGreeting() {
   const now = new Date();
   
   // Add your timezone offset (for Sri Lanka/India: UTC+5:30)
-  // Adjust this offset based on your timezone
   const timezoneOffset = 5.5; // 5 hours 30 minutes
   const localTime = new Date(now.getTime() + (timezoneOffset * 60 * 60 * 1000));
   const hour = localTime.getUTCHours();
@@ -33,7 +32,9 @@ function getGreeting() {
 // Helper function to make API requests
 async function searchSubtitles(query) {
   try {
-    const response = await axios.get(`${API_BASE_URL}/api/search/${encodeURIComponent(query)}`);
+    const response = await axios.get(`${API_BASE_URL}/api/search/${encodeURIComponent(query)}`, {
+      timeout: 10000
+    });
     return response.data;
   } catch (error) {
     console.error('Search API error:', error);
@@ -43,7 +44,9 @@ async function searchSubtitles(query) {
 
 async function getSubtitlesByTMDB(tmdbId) {
   try {
-    const response = await axios.get(`${API_BASE_URL}/api/subtitles/tmdb/${tmdbId}`);
+    const response = await axios.get(`${API_BASE_URL}/api/subtitles/tmdb/${tmdbId}`, {
+      timeout: 10000
+    });
     return response.data;
   } catch (error) {
     console.error('TMDB API error:', error);
@@ -55,11 +58,13 @@ async function downloadSubtitle(downloadUrl) {
   try {
     const response = await axios.get(`${API_BASE_URL}${downloadUrl}`, {
       responseType: 'arraybuffer',
-      timeout: 30000 // 30 seconds timeout
+      timeout: 20000, // 20 seconds timeout
+      maxContentLength: 10 * 1024 * 1024, // 10MB max
+      maxBodyLength: 10 * 1024 * 1024
     });
     return response.data;
   } catch (error) {
-    console.error('Download error:', error);
+    console.error('Download error:', error.message);
     return null;
   }
 }
@@ -150,6 +155,8 @@ bot.help((ctx) => {
 • /tmdb 550
 • /tmdb 680
 
+ᴏʀ ᴊᴜsᴛ ᴛʏᴘᴇ ᴀɴʏ ᴍᴏᴠɪᴇ ɴᴀᴍᴇ ᴅɪʀᴇᴄᴛʟʏ!
+
 ʙᴏᴛ ᴅᴇᴠᴇʟᴏᴘᴇᴅ ʙʏ @Zeroboy216`, { parse_mode: 'Markdown' });
 });
 
@@ -158,7 +165,7 @@ bot.command('search', async (ctx) => {
   const query = ctx.message.text.split(' ').slice(1).join(' ');
   
   if (!query) {
-    return ctx.reply('❌ ᴘʟᴇᴀsᴇ ᴘʀᴏᴠɪᴅᴇ ᴀ ᴍᴏᴠɪᴇ ɴᴀᴍᴇ. ᴇxᴀᴍᴘʟᴇ: /search Fight Club');
+    return ctx.reply('❌ ᴘʟᴇᴀsᴇ ᴘʀᴏᴠɪᴅᴇ ᴀ ᴍᴏᴠɪᴇ ɴᴀᴍᴇ.\n\n*ᴇxᴀᴍᴘʟᴇ:* /search Fight Club', { parse_mode: 'Markdown' });
   }
 
   await handleSearch(ctx, query);
@@ -169,7 +176,7 @@ bot.command('tmdb', async (ctx) => {
   const tmdbId = ctx.message.text.split(' ')[1];
   
   if (!tmdbId) {
-    return ctx.reply('❌ ᴘʟᴇᴀsᴇ ᴘʀᴏᴠɪᴅᴇ ᴀ ᴛᴍᴅʙ ɪᴅ. ᴇxᴀᴍᴘʟᴇ: /tmdb 550');
+    return ctx.reply('❌ ᴘʟᴇᴀsᴇ ᴘʀᴏᴠɪᴅᴇ ᴀ ᴛᴍᴅʙ ɪᴅ.\n\n*ᴇxᴀᴍᴘʟᴇ:* /tmdb 550', { parse_mode: 'Markdown' });
   }
 
   if (!/^\d+$/.test(tmdbId)) {
@@ -178,10 +185,13 @@ bot.command('tmdb', async (ctx) => {
 
   try {
     const startTime = Date.now();
-    ctx.reply('🔍 sᴇᴀʀᴄʜɪɴɢ ғᴏʀ sᴜʙᴛɪᴛʟᴇs ʙʏ ᴛᴍᴅʙ ɪᴅ...');
+    const searchMsg = await ctx.reply('🔍 sᴇᴀʀᴄʜɪɴɢ...');
     
     const data = await getSubtitlesByTMDB(tmdbId);
     const searchTime = ((Date.now() - startTime) / 1000).toFixed(2);
+    
+    // Delete searching message
+    await ctx.telegram.deleteMessage(ctx.chat.id, searchMsg.message_id).catch(() => {});
     
     if (!data || !data.success) {
       return ctx.reply('❌ ɴᴏ sᴜʙᴛɪᴛʟᴇs ғᴏᴜɴᴅ ғᴏʀ ᴛʜɪs ᴛᴍᴅʙ ɪᴅ.');
@@ -197,7 +207,7 @@ bot.command('tmdb', async (ctx) => {
     
   } catch (error) {
     console.error('TMDB search error:', error);
-    ctx.reply('❌ ᴇʀʀᴏʀ sᴇᴀʀᴄʜɪɴɢ ғᴏʀ sᴜʙᴛɪᴛʟᴇs. ᴘʟᴇᴀsᴇ ᴛʀʏ ᴀɢᴀɪɴ.');
+    ctx.reply('❌ ᴇʀʀᴏʀ sᴇᴀʀᴄʜɪɴɢ. ᴘʟᴇᴀsᴇ ᴛʀʏ ᴀɢᴀɪɴ.');
   }
 });
 
@@ -205,13 +215,16 @@ bot.command('tmdb', async (ctx) => {
 async function handleSearch(ctx, query) {
   try {
     const startTime = Date.now();
-    ctx.reply('🔍 sᴇᴀʀᴄʜɪɴɢ ғᴏʀ sᴜʙᴛɪᴛʟᴇs...');
+    const searchMsg = await ctx.reply('🔍 sᴇᴀʀᴄʜɪɴɢ...');
     
     const data = await searchSubtitles(query);
     const searchTime = ((Date.now() - startTime) / 1000).toFixed(2);
     
+    // Delete searching message
+    await ctx.telegram.deleteMessage(ctx.chat.id, searchMsg.message_id).catch(() => {});
+    
     if (!data || !data.success) {
-      return ctx.reply('❌ ɴᴏ sᴜʙᴛɪᴛʟᴇs ғᴏᴜɴᴅ. ᴘʟᴇᴀsᴇ ᴛʀʏ ᴀɴᴏᴛʜᴇʀ ᴍᴏᴠɪᴇ ɴᴀᴍᴇ.');
+      return ctx.reply('❌ ɴᴏ sᴜʙᴛɪᴛʟᴇs ғᴏᴜɴᴅ.\n\nᴛʀʏ ᴀɴᴏᴛʜᴇʀ ᴍᴏᴠɪᴇ ɴᴀᴍᴇ!');
     }
 
     // Store movie data in session
@@ -223,8 +236,8 @@ async function handleSearch(ctx, query) {
     await sendMovieResults(ctx, data, searchTime, query);
     
   } catch (error) {
-    console.error('Quick search error:', error);
-    ctx.reply('❌ ᴇʀʀᴏʀ sᴇᴀʀᴄʜɪɴɢ ғᴏʀ sᴜʙᴛɪᴛʟᴇs. ᴘʟᴇᴀsᴇ ᴛʀʏ ᴀɢᴀɪɴ.');
+    console.error('Search error:', error);
+    ctx.reply('❌ ᴇʀʀᴏʀ sᴇᴀʀᴄʜɪɴɢ. ᴘʟᴇᴀsᴇ ᴛʀʏ ᴀɢᴀɪɴ.');
   }
 }
 
@@ -234,7 +247,7 @@ async function sendMovieResults(ctx, data, searchTime, query) {
   const userName = ctx.from.first_name || 'User';
   
   // Autofilter style header
-  const headerMessage = `Tʜᴇ Rᴇꜱᴜʟᴛꜱ Fᴏʀ ☞ ${query}
+  const headerMessage = `Tʜᴇ Rᴇꜱᴜʟᴛꜱ Fᴏʀ ☞ *${query}*
 
 Rᴇǫᴜᴇꜱᴛᴇᴅ Bʏ ☞ ${userName}
 
@@ -244,7 +257,7 @@ Rᴇǫᴜᴇꜱᴛᴇᴅ Bʏ ☞ ${userName}
 
 🍿 Yᴏᴜʀ Subtitles Fɪʟᴇꜱ 👇`;
 
-  await ctx.reply(headerMessage);
+  await ctx.reply(headerMessage, { parse_mode: 'Markdown' });
 
   // Group subtitles by language
   const subtitlesByLang = {};
@@ -259,11 +272,18 @@ Rᴇǫᴜᴇꜱᴛᴇᴅ Bʏ ☞ ${userName}
   for (const [language, langSubtitles] of Object.entries(subtitlesByLang)) {
     const buttons = [];
     
-    // Create buttons in rows of 2
-    for (let i = 0; i < Math.min(langSubtitles.length, 20); i++) {
+    // Create buttons in rows - limit to 30 subtitles per language
+    for (let i = 0; i < Math.min(langSubtitles.length, 30); i++) {
       const sub = langSubtitles[i];
-      const buttonText = `📥 ${sub.name.substring(0, 35)}...`;
-      const callbackData = `dl_${i}_${language}_${Date.now()}`.substring(0, 64);
+      
+      // Shorten name for button
+      let displayName = sub.name;
+      if (displayName.length > 40) {
+        displayName = displayName.substring(0, 37) + '...';
+      }
+      
+      const buttonText = `📥 ${displayName}`;
+      const callbackData = `dl_${ctx.from.id}_${i}_${language}`.substring(0, 64);
       
       // Store subtitle info in session for callback
       const session = userSessions.get(ctx.from.id) || {};
@@ -280,7 +300,7 @@ Rᴇǫᴜᴇꜱᴛᴇᴅ Bʏ ☞ ${userName}
       keyboard.push([button]);
     });
     
-    const langHeader = `🗣️ *${language} Sᴜʙᴛɪᴛʟᴇs* (${langSubtitles.length} ᴀᴠᴀɪʟᴀʙʟᴇ)`;
+    const langHeader = `🗣️ *${language} Sᴜʙᴛɪᴛʟᴇs* (${Math.min(langSubtitles.length, 30)} sʜᴏᴡɪɴɢ)`;
     
     try {
       await ctx.reply(langHeader, {
@@ -301,43 +321,46 @@ bot.on('callback_query', async (ctx) => {
     const session = userSessions.get(ctx.from.id);
     
     if (!session || !session.downloadMap || !session.downloadMap[callbackData]) {
-      return ctx.answerCbQuery('❌ sᴜʙᴛɪᴛʟᴇ ɴᴏᴛ ғᴏᴜɴᴅ. ᴘʟᴇᴀsᴇ sᴇᴀʀᴄʜ ᴀɢᴀɪɴ.');
+      return ctx.answerCbQuery('❌ sᴜʙᴛɪᴛʟᴇ ᴇxᴘɪʀᴇᴅ. sᴇᴀʀᴄʜ ᴀɢᴀɪɴ!', { show_alert: true });
     }
     
     const subtitle = session.downloadMap[callbackData];
     
     try {
-      await ctx.answerCbQuery('⏳ ᴅᴏᴡɴʟᴏᴀᴅɪɴɢ sᴜʙᴛɪᴛʟᴇ... ᴘʟᴇᴀsᴇ ᴡᴀɪᴛ 20 sᴇᴄᴏɴᴅs');
+      // Quick response
+      await ctx.answerCbQuery('⚡ ᴅᴏᴡɴʟᴏᴀᴅɪɴɢ...');
       
-      const downloadMsg = await ctx.reply('📥 ᴅᴏᴡɴʟᴏᴀᴅɪɴɢ ʏᴏᴜʀ sᴜʙᴛɪᴛʟᴇ...\n⏱️ ᴛʜɪs ᴍᴀʏ ᴛᴀᴋᴇ ᴜᴘ ᴛᴏ 20 sᴇᴄᴏɴᴅs\n\n*ᴘʟᴇᴀsᴇ ᴡᴀɪᴛ...*', { parse_mode: 'Markdown' });
+      // Show downloading status
+      const statusMsg = await ctx.reply('⚡ *ᴅᴏᴡɴʟᴏᴀᴅɪɴɢ...*\n\n📁 ' + subtitle.name.substring(0, 50), { parse_mode: 'Markdown' });
       
+      // Download the file
       const fileData = await downloadSubtitle(subtitle.proxy_download_url);
       
       if (!fileData) {
-        await ctx.telegram.editMessageText(
-          ctx.chat.id,
-          downloadMsg.message_id,
-          null,
-          '❌ ғᴀɪʟᴇᴅ ᴛᴏ ᴅᴏᴡɴʟᴏᴀᴅ sᴜʙᴛɪᴛʟᴇ. ᴘʟᴇᴀsᴇ ᴛʀʏ ᴀɢᴀɪɴ.'
-        );
-        return;
+        // Delete status message
+        await ctx.telegram.deleteMessage(ctx.chat.id, statusMsg.message_id).catch(() => {});
+        return ctx.reply('❌ *ᴅᴏᴡɴʟᴏᴀᴅ ғᴀɪʟᴇᴅ*\n\nᴛʀʏ ᴀɴᴏᴛʜᴇʀ sᴜʙᴛɪᴛʟᴇ ᴏʀ sᴇᴀʀᴄʜ ᴀɢᴀɪɴ!', { parse_mode: 'Markdown' });
       }
       
       // Delete downloading message
-      await ctx.telegram.deleteMessage(ctx.chat.id, downloadMsg.message_id);
+      await ctx.telegram.deleteMessage(ctx.chat.id, statusMsg.message_id).catch(() => {});
       
-      // Send subtitle file directly to user
+      // Send subtitle file directly
       await ctx.replyWithDocument(
-        { source: Buffer.from(fileData), filename: subtitle.name },
+        { 
+          source: Buffer.from(fileData), 
+          filename: subtitle.name 
+        },
         {
-          caption: `✅ *sᴜʙᴛɪᴛʟᴇ ᴅᴏᴡɴʟᴏᴀᴅᴇᴅ sᴜᴄᴄᴇssғᴜʟʟʏ!*\n\n📁 ${subtitle.name}\n⭐ ʀᴀᴛɪɴɢ: ${subtitle.rating}\n📥 ᴅᴏᴡɴʟᴏᴀᴅs: ${subtitle.downloads}\n\nᴘᴏᴡᴇʀᴇᴅ ʙʏ @Subtitles_Z_bot`,
+          caption: `✅ *sᴜʙᴛɪᴛʟᴇ ʀᴇᴀᴅʏ!*\n\n📁 ${subtitle.name}\n⭐ ${subtitle.rating} | 📥 ${subtitle.downloads}\n\nᴘᴏᴡᴇʀᴇᴅ ʙʏ @Subtitles_Z_bot`,
           parse_mode: 'Markdown'
         }
       );
       
     } catch (error) {
       console.error('Download error:', error);
-      ctx.reply('❌ ᴇʀʀᴏʀ ᴅᴏᴡɴʟᴏᴀᴅɪɴɢ sᴜʙᴛɪᴛʟᴇ. ᴘʟᴇᴀsᴇ ᴛʀʏ ᴀɢᴀɪɴ ʟᴀᴛᴇʀ.');
+      await ctx.answerCbQuery('❌ ᴅᴏᴡɴʟᴏᴀᴅ ғᴀɪʟᴇᴅ', { show_alert: true });
+      ctx.reply('❌ *ᴇʀʀᴏʀ!*\n\nᴄᴏᴜʟᴅɴ\'ᴛ ᴅᴏᴡɴʟᴏᴀᴅ. ᴛʀʏ ᴀɴᴏᴛʜᴇʀ sᴜʙᴛɪᴛʟᴇ.', { parse_mode: 'Markdown' });
     }
   }
 });
