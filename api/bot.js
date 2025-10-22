@@ -200,13 +200,15 @@ bot.command('tmdb', async (ctx) => {
     // Store movie data in session
     userSessions.set(ctx.from.id, {
       movie: data.movie,
-      subtitles: data.subtitles
+      subtitles: data.subtitles,
+      searchTime: searchTime,
+      query: tmdbId
     });
 
-    // Wait 1.5 seconds before showing results (like autofilter)
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    // Wait 1 second before showing results
+    await new Promise(resolve => setTimeout(resolve, 1000));
 
-    await sendMovieResults(ctx, data, searchTime, tmdbId);
+    await showLanguageSelection(ctx, data, searchTime, tmdbId);
     
   } catch (error) {
     console.error('TMDB search error:', error);
@@ -233,13 +235,15 @@ async function handleSearch(ctx, query) {
     // Store movie data in session
     userSessions.set(ctx.from.id, {
       movie: data.movie,
-      subtitles: data.subtitles
+      subtitles: data.subtitles,
+      searchTime: searchTime,
+      query: query
     });
 
-    // Wait 1.5 seconds before showing results (like autofilter)
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    // Wait 1 second before showing results
+    await new Promise(resolve => setTimeout(resolve, 1000));
 
-    await sendMovieResults(ctx, data, searchTime, query);
+    await showLanguageSelection(ctx, data, searchTime, query);
     
   } catch (error) {
     console.error('Search error:', error);
@@ -247,24 +251,11 @@ async function handleSearch(ctx, query) {
   }
 }
 
-// Function to send movie results with autofilter style
-async function sendMovieResults(ctx, data, searchTime, query) {
-  const { movie, subtitles } = data;
+// Show language selection with inline buttons
+async function showLanguageSelection(ctx, data, searchTime, query) {
+  const { subtitles } = data;
   const userName = ctx.from.first_name || 'User';
   
-  // Autofilter style header
-  const headerMessage = `Tʜᴇ Rᴇꜱᴜʟᴛꜱ Fᴏʀ ☞ *${query}*
-
-Rᴇǫᴜᴇꜱᴛᴇᴅ Bʏ ☞ ${userName}
-
-ʀᴇsᴜʟᴛ sʜᴏᴡ ɪɴ ☞ ${searchTime} sᴇᴄᴏɴᴅs
-
-ᴘᴏᴡᴇʀᴇᴅ ʙʏ ☞ @Subtitles_Z_bot
-
-🍿 Yᴏᴜʀ Subtitles Fɪʟᴇꜱ 👇`;
-
-  await ctx.reply(headerMessage, { parse_mode: 'Markdown' });
-
   // Group subtitles by language
   const subtitlesByLang = {};
   subtitles.forEach(sub => {
@@ -274,60 +265,158 @@ Rᴇǫᴜᴇꜱᴛᴇᴅ Bʏ ☞ ${userName}
     subtitlesByLang[sub.language].push(sub);
   });
 
-  // Send subtitles with inline buttons (autofilter style)
-  for (const [language, langSubtitles] of Object.entries(subtitlesByLang)) {
-    const buttons = [];
+  // Autofilter style header
+  const headerMessage = `Tʜᴇ Rᴇꜱᴜʟᴛꜱ Fᴏʀ ☞ *${query}*
+
+Rᴇǫᴜᴇꜱᴛᴇᴅ Bʏ ☞ ${userName}
+
+ʀᴇsᴜʟᴛ sʜᴏᴡ ɪɴ ☞ ${searchTime} sᴇᴄᴏɴᴅs
+
+ᴘᴏᴡᴇʀᴇᴅ ʙʏ ☞ @Subtitles_Z_bot
+
+🗣️ *sᴇʟᴇᴄᴛ ʏᴏᴜʀ ʟᴀɴɢᴜᴀɢᴇ:*`;
+
+  // Create language selection buttons (2 per row)
+  const languageButtons = [];
+  const languages = Object.keys(subtitlesByLang);
+  
+  for (let i = 0; i < languages.length; i += 2) {
+    const row = [];
+    const lang1 = languages[i];
+    const count1 = subtitlesByLang[lang1].length;
+    row.push(Markup.button.callback(`🗣️ ${lang1} (${count1})`, `lang_${lang1}`));
     
-    // Create buttons in rows - limit to 30 subtitles per language
-    for (let i = 0; i < Math.min(langSubtitles.length, 30); i++) {
-      const sub = langSubtitles[i];
-      
-      // Shorten name for button
-      let displayName = sub.name;
-      if (displayName.length > 40) {
-        displayName = displayName.substring(0, 37) + '...';
-      }
-      
-      const buttonText = `📥 ${displayName}`;
-      const callbackData = `dl_${ctx.from.id}_${i}_${language}`.substring(0, 64);
-      
-      // Store subtitle info in session for callback
-      const session = userSessions.get(ctx.from.id) || {};
-      if (!session.downloadMap) session.downloadMap = {};
-      session.downloadMap[callbackData] = sub;
-      userSessions.set(ctx.from.id, session);
-      
-      buttons.push(Markup.button.callback(buttonText, callbackData));
+    if (i + 1 < languages.length) {
+      const lang2 = languages[i + 1];
+      const count2 = subtitlesByLang[lang2].length;
+      row.push(Markup.button.callback(`🗣️ ${lang2} (${count2})`, `lang_${lang2}`));
     }
     
-    // Arrange buttons in rows of 1 (full width like autofilter)
-    const keyboard = [];
-    buttons.forEach(button => {
-      keyboard.push([button]);
-    });
-    
-    const langHeader = `🗣️ *${language} Sᴜʙᴛɪᴛʟᴇs* (${Math.min(langSubtitles.length, 30)} sʜᴏᴡɪɴɢ)`;
-    
-    try {
-      await ctx.reply(langHeader, {
-        parse_mode: 'Markdown',
-        ...Markup.inlineKeyboard(keyboard)
-      });
-    } catch (error) {
-      console.error('Error sending subtitles:', error);
-    }
+    languageButtons.push(row);
   }
+
+  await ctx.reply(headerMessage, {
+    parse_mode: 'Markdown',
+    ...Markup.inlineKeyboard(languageButtons)
+  });
 }
 
-// Handle callback queries for subtitle downloads
+// Show subtitle files for selected language (max 6 files, 2 per row)
+async function showSubtitlesForLanguage(ctx, language, messageId) {
+  const session = userSessions.get(ctx.from.id);
+  
+  if (!session) {
+    return ctx.answerCbQuery('❌ sᴇssɪᴏɴ ᴇxᴘɪʀᴇᴅ. sᴇᴀʀᴄʜ ᴀɢᴀɪɴ!', { show_alert: true });
+  }
+
+  const { subtitles, query } = session;
+  
+  // Filter subtitles by language
+  const langSubtitles = subtitles.filter(sub => sub.language === language);
+  
+  if (langSubtitles.length === 0) {
+    return ctx.answerCbQuery('❌ ɴᴏ sᴜʙᴛɪᴛʟᴇs ғᴏᴜɴᴅ', { show_alert: true });
+  }
+
+  // Delete the language selection message
+  await ctx.telegram.deleteMessage(ctx.chat.id, messageId).catch(() => {});
+
+  const userName = ctx.from.first_name || 'User';
+  
+  const subtitleMessage = `📥 *${language} sᴜʙᴛɪᴛʟᴇs ғᴏʀ:* ${query}
+
+Rᴇǫᴜᴇꜱᴛᴇᴅ Bʏ ☞ ${userName}
+
+🍿 *sᴇʟᴇᴄᴛ ᴀ ғɪʟᴇ ᴛᴏ ᴅᴏᴡɴʟᴏᴀᴅ:*`;
+
+  // Create file buttons (max 6 files, 2 per row)
+  const fileButtons = [];
+  const maxFiles = Math.min(langSubtitles.length, 6);
+  
+  for (let i = 0; i < maxFiles; i += 2) {
+    const row = [];
+    const sub1 = langSubtitles[i];
+    
+    // Shorten name for button
+    let displayName1 = sub1.name;
+    if (displayName1.length > 25) {
+      displayName1 = displayName1.substring(0, 22) + '...';
+    }
+    
+    const callbackData1 = `dl_${ctx.from.id}_${i}_${language}`.substring(0, 64);
+    
+    // Store subtitle info in session
+    if (!session.downloadMap) session.downloadMap = {};
+    session.downloadMap[callbackData1] = sub1;
+    userSessions.set(ctx.from.id, session);
+    
+    row.push(Markup.button.callback(`📥 ${displayName1}`, callbackData1));
+    
+    // Add second button if available
+    if (i + 1 < maxFiles) {
+      const sub2 = langSubtitles[i + 1];
+      
+      let displayName2 = sub2.name;
+      if (displayName2.length > 25) {
+        displayName2 = displayName2.substring(0, 22) + '...';
+      }
+      
+      const callbackData2 = `dl_${ctx.from.id}_${i + 1}_${language}`.substring(0, 64);
+      session.downloadMap[callbackData2] = sub2;
+      userSessions.set(ctx.from.id, session);
+      
+      row.push(Markup.button.callback(`📥 ${displayName2}`, callbackData2));
+    }
+    
+    fileButtons.push(row);
+  }
+
+  // Add back button
+  fileButtons.push([Markup.button.callback('🔙 ʙᴀᴄᴋ ᴛᴏ ʟᴀɴɢᴜᴀɢᴇs', 'back_to_languages')]);
+
+  await ctx.reply(subtitleMessage, {
+    parse_mode: 'Markdown',
+    ...Markup.inlineKeyboard(fileButtons)
+  });
+}
+
+// Handle callback queries
 bot.on('callback_query', async (ctx) => {
   const callbackData = ctx.callbackQuery.data;
   
+  // Handle language selection
+  if (callbackData.startsWith('lang_')) {
+    const language = callbackData.replace('lang_', '');
+    await ctx.answerCbQuery(`✅ sᴇʟᴇᴄᴛᴇᴅ ${language}`);
+    await showSubtitlesForLanguage(ctx, language, ctx.callbackQuery.message.message_id);
+    return;
+  }
+  
+  // Handle back to languages
+  if (callbackData === 'back_to_languages') {
+    const session = userSessions.get(ctx.from.id);
+    if (!session) {
+      return ctx.answerCbQuery('❌ sᴇssɪᴏɴ ᴇxᴘɪʀᴇᴅ. sᴇᴀʀᴄʜ ᴀɢᴀɪɴ!', { show_alert: true });
+    }
+    
+    await ctx.answerCbQuery('🔙 ʙᴀᴄᴋ');
+    await ctx.telegram.deleteMessage(ctx.chat.id, ctx.callbackQuery.message.message_id).catch(() => {});
+    
+    const data = {
+      movie: session.movie,
+      subtitles: session.subtitles
+    };
+    
+    await showLanguageSelection(ctx, data, session.searchTime, session.query);
+    return;
+  }
+  
+  // Handle subtitle download
   if (callbackData.startsWith('dl_')) {
     const session = userSessions.get(ctx.from.id);
     
     if (!session || !session.downloadMap || !session.downloadMap[callbackData]) {
-      return ctx.answerCbQuery('❌ sᴜʙᴛɪᴛʟᴇ ᴇxᴘɪʀᴇᴅ. sᴇᴀʀᴄʜ ᴀɢᴀɪɴ!', { show_alert: true });
+      return ctx.answerCbQuery('❌ sᴜʙᴛɪᴛʟᴇ ɴᴏᴛ ғᴏᴜɴᴅ. sᴇᴀʀᴄʜ ᴀɢᴀɪɴ!', { show_alert: true });
     }
     
     const subtitle = session.downloadMap[callbackData];
@@ -336,7 +425,7 @@ bot.on('callback_query', async (ctx) => {
       // Quick response
       await ctx.answerCbQuery('⚡ ᴅᴏᴡɴʟᴏᴀᴅɪɴɢ...');
       
-      // Show uploading status in chat (like autofilter bots)
+      // Show uploading status in chat
       const statusMsg = await ctx.reply('📤 *ᴜᴘʟᴏᴀᴅɪɴɢ ᴛᴏ ᴛᴇʟᴇɢʀᴀᴍ...*\n\n📁 ' + subtitle.name.substring(0, 50), { parse_mode: 'Markdown' });
       
       // Download the file
@@ -345,7 +434,7 @@ bot.on('callback_query', async (ctx) => {
       if (!fileData) {
         // Delete status message
         await ctx.telegram.deleteMessage(ctx.chat.id, statusMsg.message_id).catch(() => {});
-        return ctx.reply('❌ *ᴅᴏᴡɴʟᴏᴀᴅ ғᴀɪʟᴇᴅ*\n\nᴛʀʏ ᴀɴᴏᴛʜᴇʀ sᴜʙᴛɪᴛʟᴇ ᴏʀ sᴇᴀʀᴄʜ ᴀɢᴀɪɴ!', { parse_mode: 'Markdown' });
+        return ctx.reply('❌ *ᴅᴏᴡɴʟᴏᴀᴅ ғᴀɪʟᴇᴅ*\n\nᴛʀʏ ᴀɴᴏᴛʜᴇʀ sᴜʙᴛɪᴛʟᴇ!', { parse_mode: 'Markdown' });
       }
       
       // Delete uploading message
@@ -366,7 +455,7 @@ bot.on('callback_query', async (ctx) => {
     } catch (error) {
       console.error('Download error:', error);
       await ctx.answerCbQuery('❌ ᴅᴏᴡɴʟᴏᴀᴅ ғᴀɪʟᴇᴅ', { show_alert: true });
-      ctx.reply('❌ *ᴇʀʀᴏʀ!*\n\nᴄᴏᴜʟᴅɴ\'ᴛ ᴅᴏᴡɴʟᴏᴀᴅ. ᴛʀʏ ᴀɴᴏᴛʜᴇʀ sᴜʙᴛɪᴛʟᴇ.', { parse_mode: 'Markdown' });
+      ctx.reply('❌ *ᴇʀʀᴏʀ!*\n\nᴄᴏᴜʟᴅɴ\'ᴛ ᴅᴏᴡɴʟᴏᴀᴅ. ᴛʀʏ ᴀɢᴀɪɴ!', { parse_mode: 'Markdown' });
     }
   }
 });
