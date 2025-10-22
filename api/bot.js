@@ -13,9 +13,17 @@ const userSessions = new Map();
 // Store user first visit and last image index
 const userVisits = new Map();
 
-// Helper function to get greeting based on time
+// Helper function to get greeting based on server time + timezone offset
 function getGreeting() {
-  const hour = new Date().getHours();
+  // Get current UTC time
+  const now = new Date();
+  
+  // Add your timezone offset (for Sri Lanka/India: UTC+5:30)
+  // Adjust this offset based on your timezone
+  const timezoneOffset = 5.5; // 5 hours 30 minutes
+  const localTime = new Date(now.getTime() + (timezoneOffset * 60 * 60 * 1000));
+  const hour = localTime.getUTCHours();
+  
   if (hour >= 5 && hour < 12) return 'ɢᴏᴏᴅ ᴍᴏʀɴɪɴɢ 🌞';
   if (hour >= 12 && hour < 17) return 'ɢᴏᴏᴅ ᴀғᴛᴇʀɴᴏᴏɴ ☀️';
   if (hour >= 17 && hour < 21) return 'ɢᴏᴏᴅ ᴇᴠᴇɴɪɴɢ 🌆';
@@ -46,7 +54,8 @@ async function getSubtitlesByTMDB(tmdbId) {
 async function downloadSubtitle(downloadUrl) {
   try {
     const response = await axios.get(`${API_BASE_URL}${downloadUrl}`, {
-      responseType: 'arraybuffer'
+      responseType: 'arraybuffer',
+      timeout: 30000 // 30 seconds timeout
     });
     return response.data;
   } catch (error) {
@@ -152,27 +161,7 @@ bot.command('search', async (ctx) => {
     return ctx.reply('❌ ᴘʟᴇᴀsᴇ ᴘʀᴏᴠɪᴅᴇ ᴀ ᴍᴏᴠɪᴇ ɴᴀᴍᴇ. ᴇxᴀᴍᴘʟᴇ: /search Fight Club');
   }
 
-  try {
-    ctx.reply('🔍 sᴇᴀʀᴄʜɪɴɢ ғᴏʀ sᴜʙᴛɪᴛʟᴇs...');
-    
-    const data = await searchSubtitles(query);
-    
-    if (!data || !data.success) {
-      return ctx.reply('❌ ɴᴏ sᴜʙᴛɪᴛʟᴇs ғᴏᴜɴᴅ ᴏʀ ᴀᴘɪ ᴇʀʀᴏʀ. ᴘʟᴇᴀsᴇ ᴛʀʏ ᴀɴᴏᴛʜᴇʀ ᴍᴏᴠɪᴇ.');
-    }
-
-    // Store movie data in session
-    userSessions.set(ctx.from.id, {
-      movie: data.movie,
-      subtitles: data.subtitles
-    });
-
-    await sendMovieResults(ctx, data);
-    
-  } catch (error) {
-    console.error('Search error:', error);
-    ctx.reply('❌ ᴇʀʀᴏʀ sᴇᴀʀᴄʜɪɴɢ ғᴏʀ sᴜʙᴛɪᴛʟᴇs. ᴘʟᴇᴀsᴇ ᴛʀʏ ᴀɢᴀɪɴ.');
-  }
+  await handleSearch(ctx, query);
 });
 
 // TMDB command
@@ -188,9 +177,11 @@ bot.command('tmdb', async (ctx) => {
   }
 
   try {
+    const startTime = Date.now();
     ctx.reply('🔍 sᴇᴀʀᴄʜɪɴɢ ғᴏʀ sᴜʙᴛɪᴛʟᴇs ʙʏ ᴛᴍᴅʙ ɪᴅ...');
     
     const data = await getSubtitlesByTMDB(tmdbId);
+    const searchTime = ((Date.now() - startTime) / 1000).toFixed(2);
     
     if (!data || !data.success) {
       return ctx.reply('❌ ɴᴏ sᴜʙᴛɪᴛʟᴇs ғᴏᴜɴᴅ ғᴏʀ ᴛʜɪs ᴛᴍᴅʙ ɪᴅ.');
@@ -202,7 +193,7 @@ bot.command('tmdb', async (ctx) => {
       subtitles: data.subtitles
     });
 
-    await sendMovieResults(ctx, data);
+    await sendMovieResults(ctx, data, searchTime, tmdbId);
     
   } catch (error) {
     console.error('TMDB search error:', error);
@@ -210,22 +201,50 @@ bot.command('tmdb', async (ctx) => {
   }
 });
 
-// Function to send movie results with direct download buttons
-async function sendMovieResults(ctx, data) {
+// Handle search with autofilter style
+async function handleSearch(ctx, query) {
+  try {
+    const startTime = Date.now();
+    ctx.reply('🔍 sᴇᴀʀᴄʜɪɴɢ ғᴏʀ sᴜʙᴛɪᴛʟᴇs...');
+    
+    const data = await searchSubtitles(query);
+    const searchTime = ((Date.now() - startTime) / 1000).toFixed(2);
+    
+    if (!data || !data.success) {
+      return ctx.reply('❌ ɴᴏ sᴜʙᴛɪᴛʟᴇs ғᴏᴜɴᴅ. ᴘʟᴇᴀsᴇ ᴛʀʏ ᴀɴᴏᴛʜᴇʀ ᴍᴏᴠɪᴇ ɴᴀᴍᴇ.');
+    }
+
+    // Store movie data in session
+    userSessions.set(ctx.from.id, {
+      movie: data.movie,
+      subtitles: data.subtitles
+    });
+
+    await sendMovieResults(ctx, data, searchTime, query);
+    
+  } catch (error) {
+    console.error('Quick search error:', error);
+    ctx.reply('❌ ᴇʀʀᴏʀ sᴇᴀʀᴄʜɪɴɢ ғᴏʀ sᴜʙᴛɪᴛʟᴇs. ᴘʟᴇᴀsᴇ ᴛʀʏ ᴀɢᴀɪɴ.');
+  }
+}
+
+// Function to send movie results with autofilter style
+async function sendMovieResults(ctx, data, searchTime, query) {
   const { movie, subtitles } = data;
+  const userName = ctx.from.first_name || 'User';
   
-  // Movie info
-  const movieInfo = `🎭 *${movie.title}* (${new Date(movie.release_date).getFullYear()})
-  
-📝 *ᴏᴠᴇʀᴠɪᴇᴡ:* ${movie.overview.substring(0, 200)}...
-⭐ *ʀᴀᴛɪɴɢ:* ${movie.vote_average}/10
-⏱️ *ʀᴜɴᴛɪᴍᴇ:* ${movie.runtime} ᴍɪɴᴜᴛᴇs
-🗣️ *ʟᴀɴɢᴜᴀɢᴇ:* ${movie.original_language}
-📅 *ʀᴇʟᴇᴀsᴇᴅ:* ${movie.release_date}
+  // Autofilter style header
+  const headerMessage = `Tʜᴇ Rᴇꜱᴜʟᴛꜱ Fᴏʀ ☞ ${query}
 
-📥 ғᴏᴜɴᴅ *${subtitles.length}* sᴜʙᴛɪᴛʟᴇ ғɪʟᴇs ᴀᴠᴀɪʟᴀʙʟᴇ`;
+Rᴇǫᴜᴇꜱᴛᴇᴅ Bʏ ☞ ${userName}
 
-  await ctx.reply(movieInfo, { parse_mode: 'Markdown' });
+ʀᴇsᴜʟᴛ sʜᴏᴡ ɪɴ ☞ ${searchTime} sᴇᴄᴏɴᴅs
+
+ᴘᴏᴡᴇʀᴇᴅ ʙʏ ☞ @Subtitles_Z_bot
+
+🍿 Yᴏᴜʀ Subtitles Fɪʟᴇꜱ 👇`;
+
+  await ctx.reply(headerMessage);
 
   // Group subtitles by language
   const subtitlesByLang = {};
@@ -236,51 +255,42 @@ async function sendMovieResults(ctx, data) {
     subtitlesByLang[sub.language].push(sub);
   });
 
-  // Send subtitles with direct download buttons
+  // Send subtitles with inline buttons (autofilter style)
   for (const [language, langSubtitles] of Object.entries(subtitlesByLang)) {
-    let langMessage = `\n🗣️ *${language} sᴜʙᴛɪᴛʟᴇs:*\n\n`;
-    
     const buttons = [];
     
-    langSubtitles.slice(0, 10).forEach((sub, index) => {
-      langMessage += `${index + 1}. ${sub.name}\n`;
-      langMessage += `   ⭐ ${sub.rating} | 📥 ${sub.downloads} ᴅᴏᴡɴʟᴏᴀᴅs\n\n`;
-      
-      // Create callback data for each subtitle
-      const callbackData = `dl_${index}_${language}`;
-      buttons.push([Markup.button.callback(`📥 ${index + 1}. ${sub.name.substring(0, 30)}...`, callbackData)]);
+    // Create buttons in rows of 2
+    for (let i = 0; i < Math.min(langSubtitles.length, 20); i++) {
+      const sub = langSubtitles[i];
+      const buttonText = `📥 ${sub.name.substring(0, 35)}...`;
+      const callbackData = `dl_${i}_${language}_${Date.now()}`.substring(0, 64);
       
       // Store subtitle info in session for callback
       const session = userSessions.get(ctx.from.id) || {};
       if (!session.downloadMap) session.downloadMap = {};
       session.downloadMap[callbackData] = sub;
       userSessions.set(ctx.from.id, session);
-    });
-
-    if (langSubtitles.length > 10) {
-      langMessage += `... ᴀɴᴅ ${langSubtitles.length - 10} ᴍᴏʀᴇ ${language} sᴜʙᴛɪᴛʟᴇs`;
+      
+      buttons.push(Markup.button.callback(buttonText, callbackData));
     }
-
+    
+    // Arrange buttons in rows of 1 (full width like autofilter)
+    const keyboard = [];
+    buttons.forEach(button => {
+      keyboard.push([button]);
+    });
+    
+    const langHeader = `🗣️ *${language} Sᴜʙᴛɪᴛʟᴇs* (${langSubtitles.length} ᴀᴠᴀɪʟᴀʙʟᴇ)`;
+    
     try {
-      await ctx.reply(langMessage, {
+      await ctx.reply(langHeader, {
         parse_mode: 'Markdown',
-        ...Markup.inlineKeyboard(buttons)
+        ...Markup.inlineKeyboard(keyboard)
       });
     } catch (error) {
       console.error('Error sending subtitles:', error);
     }
   }
-
-  // Send quick actions
-  const quickActions = `💡 *ǫᴜɪᴄᴋ ᴀᴄᴛɪᴏɴs:*
-  
-ᴄʟɪᴄᴋ ᴀɴʏ ʙᴜᴛᴛᴏɴ ᴀʙᴏᴠᴇ ᴛᴏ ᴅᴏᴡɴʟᴏᴀᴅ sᴜʙᴛɪᴛʟᴇs ᴅɪʀᴇᴄᴛʟʏ!
-
-/search <movie> - sᴇᴀʀᴄʜ ᴀɴᴏᴛʜᴇʀ ᴍᴏᴠɪᴇ
-/tmdb <id> - sᴇᴀʀᴄʜ ʙʏ ᴛᴍᴅʙ ɪᴅ
-/help - sʜᴏᴡ ʜᴇʟᴘ`;
-
-  await ctx.reply(quickActions, { parse_mode: 'Markdown' });
 }
 
 // Handle callback queries for subtitle downloads
@@ -297,32 +307,42 @@ bot.on('callback_query', async (ctx) => {
     const subtitle = session.downloadMap[callbackData];
     
     try {
-      await ctx.answerCbQuery('⏳ ᴅᴏᴡɴʟᴏᴀᴅɪɴɢ sᴜʙᴛɪᴛʟᴇ...');
-      await ctx.reply('📥 ᴅᴏᴡɴʟᴏᴀᴅɪɴɢ ʏᴏᴜʀ sᴜʙᴛɪᴛʟᴇ, ᴘʟᴇᴀsᴇ ᴡᴀɪᴛ...');
+      await ctx.answerCbQuery('⏳ ᴅᴏᴡɴʟᴏᴀᴅɪɴɢ sᴜʙᴛɪᴛʟᴇ... ᴘʟᴇᴀsᴇ ᴡᴀɪᴛ 20 sᴇᴄᴏɴᴅs');
+      
+      const downloadMsg = await ctx.reply('📥 ᴅᴏᴡɴʟᴏᴀᴅɪɴɢ ʏᴏᴜʀ sᴜʙᴛɪᴛʟᴇ...\n⏱️ ᴛʜɪs ᴍᴀʏ ᴛᴀᴋᴇ ᴜᴘ ᴛᴏ 20 sᴇᴄᴏɴᴅs\n\n*ᴘʟᴇᴀsᴇ ᴡᴀɪᴛ...*', { parse_mode: 'Markdown' });
       
       const fileData = await downloadSubtitle(subtitle.proxy_download_url);
       
       if (!fileData) {
-        return ctx.reply('❌ ғᴀɪʟᴇᴅ ᴛᴏ ᴅᴏᴡɴʟᴏᴀᴅ sᴜʙᴛɪᴛʟᴇ. ᴘʟᴇᴀsᴇ ᴛʀʏ ᴀɢᴀɪɴ.');
+        await ctx.telegram.editMessageText(
+          ctx.chat.id,
+          downloadMsg.message_id,
+          null,
+          '❌ ғᴀɪʟᴇᴅ ᴛᴏ ᴅᴏᴡɴʟᴏᴀᴅ sᴜʙᴛɪᴛʟᴇ. ᴘʟᴇᴀsᴇ ᴛʀʏ ᴀɢᴀɪɴ.'
+        );
+        return;
       }
+      
+      // Delete downloading message
+      await ctx.telegram.deleteMessage(ctx.chat.id, downloadMsg.message_id);
       
       // Send subtitle file directly to user
       await ctx.replyWithDocument(
         { source: Buffer.from(fileData), filename: subtitle.name },
         {
-          caption: `✅ *sᴜʙᴛɪᴛʟᴇ ᴅᴏᴡɴʟᴏᴀᴅᴇᴅ sᴜᴄᴄᴇssғᴜʟʟʏ!*\n\n📁 ${subtitle.name}\n⭐ ${subtitle.rating} | 📥 ${subtitle.downloads} ᴅᴏᴡɴʟᴏᴀᴅs`,
+          caption: `✅ *sᴜʙᴛɪᴛʟᴇ ᴅᴏᴡɴʟᴏᴀᴅᴇᴅ sᴜᴄᴄᴇssғᴜʟʟʏ!*\n\n📁 ${subtitle.name}\n⭐ ʀᴀᴛɪɴɢ: ${subtitle.rating}\n📥 ᴅᴏᴡɴʟᴏᴀᴅs: ${subtitle.downloads}\n\nᴘᴏᴡᴇʀᴇᴅ ʙʏ @Subtitles_Z_bot`,
           parse_mode: 'Markdown'
         }
       );
       
     } catch (error) {
       console.error('Download error:', error);
-      ctx.reply('❌ ᴇʀʀᴏʀ ᴅᴏᴡɴʟᴏᴀᴅɪɴɢ sᴜʙᴛɪᴛʟᴇ. ᴘʟᴇᴀsᴇ ᴛʀʏ ᴀɢᴀɪɴ.');
+      ctx.reply('❌ ᴇʀʀᴏʀ ᴅᴏᴡɴʟᴏᴀᴅɪɴɢ sᴜʙᴛɪᴛʟᴇ. ᴘʟᴇᴀsᴇ ᴛʀʏ ᴀɢᴀɪɴ ʟᴀᴛᴇʀ.');
     }
   }
 });
 
-// Handle text messages for quick search
+// Handle text messages for quick search (autofilter style)
 bot.on('text', async (ctx) => {
   const text = ctx.message.text;
   
@@ -331,27 +351,7 @@ bot.on('text', async (ctx) => {
   
   // If message is longer than 2 characters, treat as search
   if (text.length > 2) {
-    try {
-      ctx.reply('🔍 sᴇᴀʀᴄʜɪɴɢ ғᴏʀ sᴜʙᴛɪᴛʟᴇs...');
-      
-      const data = await searchSubtitles(text);
-      
-      if (!data || !data.success) {
-        return ctx.reply('❌ ɴᴏ sᴜʙᴛɪᴛʟᴇs ғᴏᴜɴᴅ. ᴘʟᴇᴀsᴇ ᴛʀʏ ᴀɴᴏᴛʜᴇʀ ᴍᴏᴠɪᴇ ɴᴀᴍᴇ.');
-      }
-
-      // Store movie data in session
-      userSessions.set(ctx.from.id, {
-        movie: data.movie,
-        subtitles: data.subtitles
-      });
-
-      await sendMovieResults(ctx, data);
-      
-    } catch (error) {
-      console.error('Quick search error:', error);
-      ctx.reply('❌ ᴇʀʀᴏʀ sᴇᴀʀᴄʜɪɴɢ ғᴏʀ sᴜʙᴛɪᴛʟᴇs. ᴘʟᴇᴀsᴇ ᴛʀʏ ᴀɢᴀɪɴ.');
-    }
+    await handleSearch(ctx, text);
   }
 });
 
