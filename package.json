@@ -1,0 +1,17 @@
+{
+  "name": "subtitle-telegram-bot",
+  "version": "1.0.0",
+  "description": "Telegram bot for subtitle downloader API",
+  "main": "api/bot.js",
+  "scripts": {
+    "start": "node api/bot.js"
+  },
+  "dependencies": {
+    "telegraf": "^4.16.3",
+    "axios": "^1.6.2",
+    "node-cron": "^3.0.3"
+  },
+  "engines": {
+    "node": "18.x"
+  }
+}
